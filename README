@@ -1,8 +1,8 @@
 hearnet - listen to your network
 
 Requirements:
-libpcap (I have 0.7.2)
-libjack (I have 0.71.2)
+libpcap
+libjack
 
 This is how I run hearnet:
 $ sudo jackd -d alsa -d hw:0 &
