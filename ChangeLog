@@ -1,0 +1,10 @@
+2004-11-12  Hans Fugal  <hans@fugal.net>
+
+    * Incorporated patch from Von Fugal allowing multiple instances of hearnet
+      to register with jackd, so you can hear more than one network at a time.
+
+2003-11-13  Hans Fugal  <hans@fugal.net>
+
+    * Cleaned up and consolidated code
+    * Can specify interface to listen to on command line now.
+    * usage()
