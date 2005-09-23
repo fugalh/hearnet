@@ -4,16 +4,23 @@
  * "Play" your network.
  *
  * @author Hans Fugal
+ *
+ * heavily modified by Leonard Ritter
+ * 
  */
 
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <jack/jack.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pcap.h>
 #include <unistd.h>
+#include <math.h>
+#include <memory.h>
+#include <time.h>
 
 /* macros */
 /// length of grain in samples
@@ -21,77 +28,92 @@
 /// Our favorite irrational number
 #define PI 3.14159265358979
 
+#define MAX_VOICES 16
+
 /* data */
-short grain_wavetable[GRAIN_PERIOD];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-int play_grain = 0;
 jack_port_t *output_port;
 jack_nframes_t srate;
 
-/* functions */
-/** initialize the grain wavetable */
-int fill_grain_wavetable() /*{{{*/
+struct voice
 {
-    // read in the wavetable from grain.raw, which has mono signed 16bit samples
-    // (i.e. the output of "sox grain.wav -r 44100 -s -w grain.raw")
-    int fd;
+	bool active;
+	float attack;
+	float attacklength;
+	float sinpos;
+	float sinfreq;
+	float amp;
+	float decaylength;
+	int age;
+};
 
-    fd = open("grain.raw",O_RDONLY);
-    if (fd < 0)
-    {
-	perror("Error opening \"grain.raw\"");
-	return -1;
-    }
+voice voices[MAX_VOICES];
 
-    int count = 0;
-    do
-    {
-	int retval;
-	retval = read(fd,grain_wavetable, GRAIN_PERIOD-count);
-	if (retval < 0)
+void init_voices()
+{
+	memset(voices,0,sizeof(voices));	
+}
+
+voice* get_free_voice()
+{
+	for (int index = 0; index < MAX_VOICES; index++)
 	{
-	    perror("Error reading \"grain.raw\"");
-	    return -1;
+		if (!voices[index].active)
+			return &voices[index];
 	}
-	if (retval == 0)
-	{
-	    fprintf(stderr,"\"grain.raw\" is too short. Expected %d samples.\n",
-		    GRAIN_PERIOD);
-	    return -1;
-	}
-	count += retval;
-    } while (count < GRAIN_PERIOD);
+	return 0;
+}
 
-    close(fd);
+float dbtoamp(float db)
+{
+	return pow(2,db/6);
+}
 
-    return 0;
-} 
 /*}}}*/
 /** process nframes frames (jack callback) */
 int process (jack_nframes_t nframes, void *arg)/*{{{*/
 {
     jack_default_audio_sample_t *out = (jack_default_audio_sample_t *) jack_port_get_buffer (output_port, nframes);
 
-    // fill out with sizeof(jack_default_audio_sample_t)*nframes bytes
-    int len = sizeof(jack_default_audio_sample_t)*nframes;
-
     pthread_mutex_lock(&mutex);
-    int i;
-    memset(out, 0, len);
-    for (i=0; i<play_grain; i++)
-    {
-	int truncate;
-	if (i*GRAIN_PERIOD > len)
+
+    memset(out, 0, sizeof(jack_default_audio_sample_t)*nframes);
+	
+	for (int index = 0; index != MAX_VOICES; index++)
 	{
-	    fprintf(stderr,"!");
-	    break;
+		if (voices[index].active)
+		{
+			voice* current_voice = &voices[index];
+			float* pout = out;			
+			for (int s = 0; s != nframes; s++)
+			{
+				*pout += sin(current_voice->sinpos) * current_voice->amp * current_voice->attack;
+				if (*pout > 1.0f)
+				{
+					*pout = 1.0f;
+				}
+				else if (*pout < -1.0f)
+				{
+					*pout = -1.0f;
+				}
+				if (current_voice->attack < 1.0f)
+				{
+					current_voice->attack += 1.0f / ((float)srate * current_voice->attacklength);
+				}
+				else
+				{
+					current_voice->amp *= 1.0f - (1.0f / ((float)srate * current_voice->decaylength));
+				}
+				current_voice->sinpos += current_voice->sinfreq / (float)srate;
+				if (current_voice->amp < 0.001)
+				{
+					current_voice->active = false;
+				}
+				pout++;
+			}
+		}
 	}
 
-	truncate = (i+1)*GRAIN_PERIOD - len;
-	if (truncate < 0) truncate = 0;
-	memcpy(out+(i*GRAIN_PERIOD), grain_wavetable, GRAIN_PERIOD - truncate);
-    }
-    play_grain = 0;
     pthread_mutex_unlock(&mutex);
 
     return 0;
@@ -117,11 +139,27 @@ void shutdown(void *arg)/*{{{*/
 void packet_handler(u_char * args, const struct pcap_pkthdr *pcap_hdr, const u_char * p)/*{{{*/
 {
     pthread_mutex_lock(&mutex);
-    play_grain++;
+	
+	voice* new_voice = get_free_voice();
+	if (new_voice)
+	{
+		memset(new_voice,0,sizeof(voice));
+		new_voice->sinpos = 0.0f;
+		float factor2 = (float)(rand()%5 + 1);
+		//float factor = pow(2,(float)(rand()%12)*4.0f / 12.0f);
+		float factor = pow(2,(float)(pcap_hdr->len / 256.0f)*3.0f / 12.0f) * factor2;
+		new_voice->sinfreq = 55.0f * 2.0f * 3.14159f * factor + ((float)(rand()%5) * factor);
+		new_voice->amp = 0.5 / (float)(MAX_VOICES); // if they all add up, we dont get bursts
+		new_voice->decaylength = (rand()%100 + 100) / 1000.0f; 
+		new_voice->attack = 0.0f;
+		new_voice->attacklength = (rand()%20 + 1) / 1000.0f; // 10ms
+		new_voice->active = true;
+	}
     pthread_mutex_unlock(&mutex);
+		
 }/*}}}*/
 
-void usage(void)/*{{{*/
+void usage(void)/*{{{*/ 
 {
     fprintf(stderr,
 	    "\n"
@@ -177,9 +215,8 @@ int main(int argc, char **argv)/*{{{*/
     free (ports);
     /*}}}*/
     
-    // init grain wavetable
-    if (fill_grain_wavetable() < 0)
-	return 1;
+    // init (empty) voice table
+	init_voices();
 
 
     // libpcap stuff /*{{{*/
@@ -191,11 +228,16 @@ int main(int argc, char **argv)/*{{{*/
 	fprintf(stderr,"pcap_open_live; %s\n", perrbuf);
 	usage();
     }
-
+ 
     /*}}}*/
 
-    while(1)
-	pcap_dispatch(hdl_pcap, 1, packet_handler, 0);
+	timeval tv_start;
+	gettimeofday(&tv_start,0);
+	srand(tv_start.tv_sec);
+	while (1)
+	{
+		pcap_dispatch(hdl_pcap, 1, packet_handler, 0);
+	}
 
     return 0;
 }/*}}}*/

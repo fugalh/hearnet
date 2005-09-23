@@ -1,3 +1,12 @@
+2005-07-26  Leonard Ritter <paniq|paniq-org>
+
+	* changed code so that it uses 32-voice polyphony and plays bridges / 
+	  chromatic orders.
+	  
+	  as an effect, you get very harmonic sounds if packet sizes on a 
+	  site are the same, and quite weird stuff if packet sizes vary.
+	
+
 2004-11-12  Hans Fugal  <hans@fugal.net>
 
     * Incorporated patch from Von Fugal allowing multiple instances of hearnet

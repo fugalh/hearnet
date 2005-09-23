@@ -5,13 +5,13 @@ libpcap
 libjack
 
 This is how I run hearnet:
-$ sudo jackd -d alsa -d hw:0 &
+$ sudo jackd -d alsa &
 $ sudo ./hearnet &
 
 
 License:
     
-    Copyright (C) 2003  Hans Fugal <hans@fugal.net>
+    Copyright (C) 2003-2005  Hans Fugal <hans@fugal.net>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

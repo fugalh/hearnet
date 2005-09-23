@@ -1,6 +1,6 @@
 CFLAGS+=-g
 LDFLAGS+=`pkg-config --cflags --libs jack` -lpcap
-version=0.0.3
+version=0.0.4
 
 all: hearnet grain.raw
 
@@ -9,5 +9,5 @@ all: hearnet grain.raw
 clean: 
 	rm -f hearnet *.o core*
 
-dist: clean
-	cd ..; tar czf hearnet-$(version).tar.gz hearnet
+dist: all
+	darcs dist -d hearnet-$(version)
