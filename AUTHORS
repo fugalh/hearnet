@@ -1,3 +1,5 @@
 Hans Fugal wrote it.
 Von Fugal patched it. 
 Leonard Ritter (paniq) made it sound cool.
+Mario Lang added filter expressions.
+Dmitry Baikov added suid and privilege dropping, and got rid of the evil mutex.

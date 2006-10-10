@@ -1,11 +1,27 @@
+2006-10-10  Dmitry Baikov <dsbaikov@gmail.com>
+
+    * make hearnet suid and drop privileges right after libpcap
+      initialization.
+    * Mutex in jack_process is a very bad thing. Moreover, it seems
+      there's no need for it, as voice->active field serves as a mutex.
+      
+      N.B. It's good enough I think, but I wonder if we might need some
+      sort of memory barrier, as noted in the comments. -- Hans
+
+2005-09-30  Mario Lang <mlang@delysid.org>
+
+    * Added filter expression support, so now you can say
+      ./hearnet eth0 "udp port 53"
+      or whatever kind of filter expression you can think of.  Very nice for
+      listening in on just specific traffic patterns!
+
 2005-07-26  Leonard Ritter <paniq|paniq-org>
 
-	* changed code so that it uses 32-voice polyphony and plays bridges / 
-	  chromatic orders.
-	  
-	  as an effect, you get very harmonic sounds if packet sizes on a 
-	  site are the same, and quite weird stuff if packet sizes vary.
-	
+    * changed code so that it uses 32-voice polyphony and plays bridges / 
+      chromatic orders.
+      
+      as an effect, you get very harmonic sounds if packet sizes on a 
+      site are the same, and quite weird stuff if packet sizes vary.
 
 2004-11-12  Hans Fugal  <hans@fugal.net>
 

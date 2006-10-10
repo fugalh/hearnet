@@ -1,17 +1,33 @@
 hearnet - listen to your network
 
 Requirements:
-libpcap
-libjack
+- libpcap
+- libjack
 
-This is how I run hearnet:
-$ sudo jackd -d alsa &
-$ sudo ./hearnet &
+Synopsis:
+    make
+    sudo make suid
+    # start jack if necessary
+    ./hearnet
 
+Details:
+
+hearnet now drops priveleges when run with the suid bit set, which means
+you can hook it into your regular non-root jackd, and run it as a normal
+user. 
+
+You can specify a filter expression (a la tcpdump), e.g.:
+
+    ./hearnet eth0 udp port 53
+
+Very nice for listening to just one kind of traffic. Try this for an
+accompaniment to your VOIP conversation:
+
+    ./hearnet eth0 udp port sip
 
 License:
     
-    Copyright (C) 2003-2005  Hans Fugal <hans@fugal.net>
+    Copyright (C) 2003-2006  Hans Fugal <hans@fugal.net>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

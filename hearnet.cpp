@@ -21,6 +21,7 @@
 #include <math.h>
 #include <memory.h>
 #include <time.h>
+#include <string>
 
 /* macros */
 /// length of grain in samples
@@ -31,7 +32,6 @@
 #define MAX_VOICES 16
 
 /* data */
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 jack_port_t *output_port;
 jack_nframes_t srate;
 
@@ -75,8 +75,6 @@ int process (jack_nframes_t nframes, void *arg)/*{{{*/
 {
     jack_default_audio_sample_t *out = (jack_default_audio_sample_t *) jack_port_get_buffer (output_port, nframes);
 
-    pthread_mutex_lock(&mutex);
-
     memset(out, 0, sizeof(jack_default_audio_sample_t)*nframes);
 	
 	for (int index = 0; index != MAX_VOICES; index++)
@@ -114,8 +112,6 @@ int process (jack_nframes_t nframes, void *arg)/*{{{*/
 		}
 	}
 
-    pthread_mutex_unlock(&mutex);
-
     return 0;
 }/*}}}*/
 /** jack callback to set sample rate */
@@ -138,8 +134,6 @@ void shutdown(void *arg)/*{{{*/
 /** packet handler called by pcap_dispatch in main() */
 void packet_handler(u_char * args, const struct pcap_pkthdr *pcap_hdr, const u_char * p)/*{{{*/
 {
-    pthread_mutex_lock(&mutex);
-	
 	voice* new_voice = get_free_voice();
 	if (new_voice)
 	{
@@ -153,9 +147,13 @@ void packet_handler(u_char * args, const struct pcap_pkthdr *pcap_hdr, const u_c
 		new_voice->decaylength = (rand()%100 + 100) / 1000.0f; 
 		new_voice->attack = 0.0f;
 		new_voice->attacklength = (rand()%20 + 1) / 1000.0f; // 10ms
-		new_voice->active = true;
+		// Since we took out the mutex, we depend on this last
+		// assignment not happening out-of-order. I don't know of a
+		// portable memory barrier, so we'll just let it float. I
+		// doubt it will be a noticeable problem, but if it is then
+		// figure out some way to put a barrier here.
+		new_voice->active = true; 
 	}
-    pthread_mutex_unlock(&mutex);
 		
 }/*}}}*/
 
@@ -163,7 +161,7 @@ void usage(void)/*{{{*/
 {
     fprintf(stderr,
 	    "\n"
-	    "usage: hearnet [interface]\n"
+	    "usage: hearnet [interface [filter-expression]]\n"
 	    "Default interface is eth0.\n"
 	    );
     exit(1);
@@ -178,6 +176,37 @@ int main(int argc, char **argv)/*{{{*/
 
     if (argc > 1)
 	dev = argv[1];
+	
+    // libpcap stuff /*{{{*/
+    pcap_t *hdl_pcap;
+    char perrbuf[PCAP_ERRBUF_SIZE];
+    hdl_pcap = pcap_open_live(dev, BUFSIZ, 0, 0, perrbuf);
+    if (hdl_pcap == NULL)
+    {
+	fprintf(stderr,"pcap_open_live; %s\n", perrbuf);
+	usage();
+    }
+
+    if (argc > 2) {
+      bpf_program bpfprog;
+      std::string s;
+      for (int i=2; i<argc; i++)
+	  s += std::string(argv[i]) + std::string(" ");
+      char *cstr = (char*)malloc(s.size()+1);
+      strncpy(cstr,s.c_str(),s.size()+1);
+
+      if (pcap_compile(hdl_pcap, &bpfprog, cstr, 1, 0XFFFFFFFF) != -1) {
+          pcap_setfilter(hdl_pcap, &bpfprog);
+      } else {
+	  printf("Error compiling filter: %s\n", pcap_geterr(hdl_pcap));
+	  exit(1);
+      }
+    }
+
+    seteuid(getuid());
+ 
+    /*}}}*/
+
     
     snprintf(client_name, sizeof(client_name), "hearnet %s", dev);
     // jack stuff {{{
@@ -218,18 +247,6 @@ int main(int argc, char **argv)/*{{{*/
     // init (empty) voice table
 	init_voices();
 
-
-    // libpcap stuff /*{{{*/
-    pcap_t *hdl_pcap;
-    char perrbuf[PCAP_ERRBUF_SIZE];
-    hdl_pcap = pcap_open_live(dev, BUFSIZ, 0, 0, perrbuf);
-    if (hdl_pcap == NULL)
-    {
-	fprintf(stderr,"pcap_open_live; %s\n", perrbuf);
-	usage();
-    }
- 
-    /*}}}*/
 
 	timeval tv_start;
 	gettimeofday(&tv_start,0);
